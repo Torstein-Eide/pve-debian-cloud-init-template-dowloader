@@ -56,6 +56,34 @@ Examples:
 - `--overwrite-existing`: Destroy an existing VM/template with the same VMID first.
 - `--verbose`: Print extra fetch/debug details.
 
+## Dynamic Image List
+
+The script fetches available Debian cloud images from:
+
+```text
+https://cloud.debian.org/images/cloud/
+```
+
+It scans the Debian cloud image index for available release directories, then checks each release's `latest/` directory for a matching AMD64 QCOW2 cloud image.
+
+For regular Debian releases, it looks for images like:
+
+```text
+debian-12-generic-amd64.qcow2
+```
+
+For Debian `sid`, it checks the daily image tree and selects the newest available daily image.
+
+The discovered image list is cached in:
+
+```text
+/var/tmp/proxmox-debian-cloudinit/debian-cloud-images.tsv
+```
+
+On later runs, the cached list is reused to avoid repeated network lookups. Use `--refresh-images` to force a fresh fetch.
+
+The script filters out duplicate aliases such as numeric release directories, `stable`, `oldstable`, and `oldoldstable`, so the interactive menu shows each Debian release only once.
+
 ## Clone Example
 
 After creating a template, clone and start a VM:
