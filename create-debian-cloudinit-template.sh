@@ -15,10 +15,10 @@ VMID=""
 NAME=""
 STORAGE=""
 BRIDGE="vmbr0"
-MEMORY="2048"
+MEMORY="512"
 CORES="2"
 DISK_SIZE=""
-PACKAGES="qemu-guest-agent,avahi-daemon"
+PACKAGES="qemu-guest-agent,avahi-daemon,needrestart,sudo"
 WORKDIR="/var/tmp/proxmox-debian-cloudinit"
 
 IMAGE_CACHE="${WORKDIR}/debian-cloud-images.tsv"
@@ -37,8 +37,8 @@ Required:
   --vmid ID                 Proxmox VMID for template
 
 Options:
-  --codename NAME           Debian codename: bullseye, bookworm, trixie, sid
-                            Default: bookworm
+  --codename NAME           Debian codename from the fetched cloud image list
+                            Default: ask interactively from available images
 
   --name NAME               VM/template name
                             Default: debian-<version>-cloudinit-template
@@ -50,7 +50,7 @@ Options:
                             Default: vmbr0
 
   --memory MB               RAM in MB
-                            Default: 2048
+                            Default: 512
 
   --cores N                 CPU cores
                             Default: 2
@@ -59,7 +59,7 @@ Options:
                             Default: keep upstream image size
 
   --packages LIST           Comma-separated packages to install in image
-                            Default: qemu-guest-agent,avahi-daemon
+                            Default: qemu-guest-agent,avahi-daemon,needrestart,sudo
 
    --refresh-images          Refresh cached Debian cloud image list
 
@@ -72,7 +72,7 @@ Options:
 Examples:
   $0 --codename trixie --vmid 9000 --name debian-13-template
   $0 --codename bookworm --vmid 9012 --storage local-lvm --disk-size 16G
-  $0 --codename bullseye --vmid 9011 --packages qemu-guest-agent,avahi-daemon,curl,vim
+  $0 --codename bullseye --vmid 9011 --packages qemu-guest-agent,avahi-daemon,needrestart,sudo,curl,vim
 EOF
 }
 
