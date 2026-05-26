@@ -80,6 +80,21 @@ The discovered image list is cached in:
 /var/tmp/proxmox-debian-cloudinit/debian-cloud-images.tsv
 ```
 
+Example out:
+
+```text
+==> Using cached Debian image list: /var/tmp/proxmox-debian-cloudinit/debian-cloud-images.tsv
+
+Available Debian cloud images:
+
+ 1) bookworm     Debian 12
+ 2) bullseye     Debian 11
+ 3) buster       Debian 10
+ 4) sid          sid
+ 5) trixie       Debian 13
+
+``` 
+
 On later runs, the cached list is reused to avoid repeated network lookups. Use `--refresh-images` to force a fresh fetch.
 
 The script filters out duplicate aliases such as numeric release directories, `stable`, `oldstable`, and `oldoldstable`, so the interactive menu shows each Debian release only once.
