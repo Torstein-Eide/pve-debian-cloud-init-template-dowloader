@@ -9,12 +9,14 @@ The script downloads a Debian cloud image, verifies its checksum, customizes it 
 - Loads available Debian cloud images dynamically from the official Debian image index.
 - Interactive Debian image and Proxmox storage selection.
 - Optional image cache refresh.
+- Cache listing without creating a template.
 - Installs `qemu-guest-agent`, `avahi-daemon`, `needrestart`, and `sudo` by default.
 - Enables `qemu-guest-agent` and mDNS via `avahi-daemon` in the image.
 - Copies local locale settings from the Proxmox host into the image when available.
 - Uses `root` as the default cloud-init user.
 - Optional disk resize before import.
 - Optional overwrite of an existing VMID.
+- Optional cleanup of downloaded work files.
 
 ## Requirements
 
@@ -30,6 +32,7 @@ The script also requires Proxmox commands such as `qm` and `pvesm`.
 
 ```bash
 ./create-debian-cloudinit-template.sh --vmid <id> [options]
+./create-debian-cloudinit-template.sh --list-cache [--refresh-images]
 ```
 
 Examples:
@@ -52,6 +55,8 @@ Examples:
 - `--disk-size SIZE`: Resize image before import, for example `16G` or `32G`.
 - `--packages LIST`: Comma-separated packages to install. Default: `qemu-guest-agent,avahi-daemon,needrestart,sudo`.
 - `--refresh-images`: Refresh the cached Debian cloud image list.
+- `--list-cache`: Print the cached Debian cloud image list and exit. Fetches the list first if the cache is missing.
+- `--cleanup`: Remove downloaded image work files after completion. If used without `--vmid`, only cleanup is performed.
 - `--no-interactive`: Fail instead of asking for missing values.
 - `--overwrite-existing`: Destroy an existing VM/template with the same VMID first.
 - `--verbose`: Print extra fetch/debug details.
@@ -77,27 +82,48 @@ For Debian `sid`, it checks the daily image tree and selects the newest availabl
 The discovered image list is cached in:
 
 ```text
-/var/tmp/proxmox-debian-cloudinit/debian-cloud-images.tsv
+/var/cache/proxmox-debian-cloudinit/debian-cloud-images.tsv
+```
+
+Downloaded images, checksums, and temporary customization files are stored under:
+
+```text
+/var/cache/proxmox-debian-cloudinit/work/
+```
+
+Use `--cleanup` to remove the work directory after a template is created, or run it alone to clean existing work files:
+
+```bash
+./create-debian-cloudinit-template.sh --cleanup
+```
+
+Use `--list-cache` to inspect the cached image list without creating a VM:
+
+```bash
+./create-debian-cloudinit-template.sh --list-cache
+./create-debian-cloudinit-template.sh --list-cache --refresh-images
 ```
 
 Example out:
 
 ```text
-==> Using cached Debian image list: /var/tmp/proxmox-debian-cloudinit/debian-cloud-images.tsv
+==> Using cached Debian image list: /var/cache/proxmox-debian-cloudinit/debian-cloud-images.tsv
 
 Available Debian cloud images:
 
- 1) bookworm     Debian 12
- 2) bullseye     Debian 11
- 3) buster       Debian 10
- 4) sid          sid
- 5) trixie       Debian 13
+ 1) trixie       Debian 13
+ 2) bookworm     Debian 12
+ 3) bullseye     Debian 11
+ 4) buster       Debian 10
+ 5) sid          sid
 
-``` 
+```
 
 On later runs, the cached list is reused to avoid repeated network lookups. Use `--refresh-images` to force a fresh fetch.
 
 The script filters out duplicate aliases such as numeric release directories, `stable`, `oldstable`, and `oldoldstable`, so the interactive menu shows each Debian release only once.
+
+The menu is sorted by Debian version with the newest numbered release first. Debian `sid` is listed last because it is an unstable rolling release rather than a numbered release.
 
 ## Clone Example
 

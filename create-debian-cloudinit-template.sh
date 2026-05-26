@@ -19,12 +19,16 @@ MEMORY="512"
 CORES="2"
 DISK_SIZE=""
 PACKAGES="qemu-guest-agent,avahi-daemon,needrestart,sudo"
-WORKDIR="/var/tmp/proxmox-debian-cloudinit"
+CACHE_DIR="/var/cache/proxmox-debian-cloudinit"
+WORKDIR="${CACHE_DIR}/work"
 
-IMAGE_CACHE="${WORKDIR}/debian-cloud-images.tsv"
+IMAGE_CACHE="${CACHE_DIR}/debian-cloud-images.tsv"
+IMAGE_ALIAS_PATTERN='^([0-9]+|stable|oldstable|oldoldstable)$'
 REFRESH_IMAGES="false"
 INTERACTIVE="true"
 OVERWRITE_EXISTING="false"
+LIST_CACHE="false"
+CLEANUP="false"
 VERBOSE="false"
 
 
@@ -32,6 +36,7 @@ usage() {
     cat <<EOF
 Usage:
   $0 --vmid <id> [options]
+  $0 --list-cache [--refresh-images]
 
 Required:
   --vmid ID                 Proxmox VMID for template
@@ -63,6 +68,10 @@ Options:
 
    --refresh-images          Refresh cached Debian cloud image list
 
+   --list-cache              Print cached Debian cloud image list and exit
+
+   --cleanup                 Remove downloaded image work files after completion
+
    --no-interactive          Fail instead of asking if --codename is missing
 
    --overwrite-existing      Destroy existing VM/template with same VMID first
@@ -82,15 +91,30 @@ log_verbose() {
     fi
 }
 
-normalize_debian_image_cache() {
-    local tmp
-    tmp="$(mktemp)"
+write_normalized_debian_image_list() {
+    local source="$1"
+    local target="$2"
 
-    awk -F'\t' '
-        $1 !~ /^([0-9]+|stable|oldstable|oldoldstable)$/ && !seen[$2]++ { print }
-    ' "$IMAGE_CACHE" > "$tmp"
+    {
+        awk -F'\t' -v alias_pattern="$IMAGE_ALIAS_PATTERN" '$1 !~ alias_pattern && $2 != "sid" { print }' "$source" | sort -t $'\t' -k2,2Vr
+        awk -F'\t' -v alias_pattern="$IMAGE_ALIAS_PATTERN" '$1 !~ alias_pattern && $2 == "sid" { print }' "$source"
+    } | awk -F'\t' '!seen[$2]++ { print }' > "$target"
+}
 
-    mv "$tmp" "$IMAGE_CACHE"
+list_cached_debian_images() {
+    echo "Cached Debian cloud images: $IMAGE_CACHE"
+    echo
+
+    awk -F'\t' '{ printf "%-12s %-8s %s\n", $1, $2, $5 }' "$IMAGE_CACHE"
+}
+
+cleanup_workdir() {
+    if [[ -d "$WORKDIR" ]]; then
+        echo "==> Cleaning workdir: $WORKDIR"
+        rm -rf "$WORKDIR"
+    else
+        echo "==> Workdir already clean: $WORKDIR"
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -117,6 +141,14 @@ while [[ $# -gt 0 ]]; do
             OVERWRITE_EXISTING="true"
             shift
             ;;
+        --list-cache)
+            LIST_CACHE="true"
+            shift
+            ;;
+        --cleanup)
+            CLEANUP="true"
+            shift
+            ;;
         --verbose)
             VERBOSE="true"
             shift
@@ -129,18 +161,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$VMID" ]]; then
-    echo "ERROR: --vmid is required" >&2
-    usage
-    exit 1
-fi
-
 fetch_debian_cloud_image_list() {
-    mkdir -p "$WORKDIR"
+    mkdir -p "$CACHE_DIR"
 
     if [[ -f "$IMAGE_CACHE" && "$REFRESH_IMAGES" != "true" ]]; then
         echo "==> Using cached Debian image list: $IMAGE_CACHE"
-        normalize_debian_image_cache
         return 0
     fi
 
@@ -152,7 +177,7 @@ fetch_debian_cloud_image_list() {
     wget -qO- "https://cloud.debian.org/images/cloud/" |
         grep -oE 'href="[^"]+/"' |
         sed -E 's/href="([^"]+)\/"/\1/' |
-        grep -Ev '^\.\.$|^current$|^daily$|^testing$|^stable$|^oldstable$|^oldoldstable$|^[0-9]+$' |
+        grep -Ev "^\.\.$|^current$|^daily$|^testing$|${IMAGE_ALIAS_PATTERN}" |
         while read -r codename; do
             local latest_url image version label daily_base daily_build_url
             log_verbose "Inspecting codename: $codename"
@@ -231,7 +256,7 @@ fetch_debian_cloud_image_list() {
             fi
         done > "$tmp"
 
-    awk -F'\t' '!seen[$2]++ { print }' "$tmp" > "${tmp}.dedup"
+    write_normalized_debian_image_list "$tmp" "${tmp}.dedup"
     mv "${tmp}.dedup" "$tmp"
 
     if [[ ! -s "$tmp" ]]; then
@@ -241,7 +266,25 @@ fetch_debian_cloud_image_list() {
     fi
 
     mv "$tmp" "$IMAGE_CACHE"
+    chmod 0644 "$IMAGE_CACHE"
 }
+
+if [[ "$LIST_CACHE" == "true" ]]; then
+    fetch_debian_cloud_image_list
+    list_cached_debian_images
+    exit 0
+fi
+
+if [[ -z "$VMID" ]]; then
+    if [[ "$CLEANUP" == "true" ]]; then
+        cleanup_workdir
+        exit 0
+    fi
+
+    echo "ERROR: --vmid is required" >&2
+    usage
+    exit 1
+fi
 
 select_debian_codename() {
     if [[ -n "${CODENAME:-}" ]]; then
@@ -521,3 +564,7 @@ echo "Clone example:"
 echo "  qm clone $VMID 100 --name test-${CODENAME} --full true"
 echo "  qm set 100 --sshkeys ~/.ssh/authorized_keys"
 echo "  qm start 100"
+
+if [[ "$CLEANUP" == "true" ]]; then
+    cleanup_workdir
+fi
